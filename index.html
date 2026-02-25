@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0f19" />
+  <title>Konsum Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <div id="authOverlay" class="overlay" aria-modal="true" role="dialog">
+    <div class="overlay-card">
+      <h2>Zugriff</h2>
+      <p class="muted" style="margin-top:6px;">Dieses Gerät ist noch nicht registriert. Bitte Passwort eingeben.</p>
+      <form id="authForm" class="form" autocomplete="off" style="margin-top:10px;">
+        <label>
+          Passwort
+          <input id="authPassword" type="password" inputmode="text" autocomplete="off" required />
+        </label>
+        <div class="row row-actions" style="margin-top:10px;">
+          <button class="btn btn-primary" type="submit">Freischalten</button>
+        </div>
+        <p id="authError" class="hint" style="display:none; margin-top:10px;"></p>
+      </form>
+      <p class="hint" style="margin-top:10px;">Hinweis: Das ist eine einfache Sperre (nicht hochsicher). Für echte Privatsphäre nutze zusätzlich Netlify Passwortschutz.</p>
+    </div>
+  </div>
+
+  <header class="header">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">KT</div>
+      <div>
+        <h1>Konsum Tracker</h1>
+        <p class="subtitle">Lokales Tracking • Sync (Netlify) • Export als Excel‑CSV</p>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button id="exportCsvBtn" class="btn btn-secondary" type="button">CSV exportieren</button>
+      <button id="backupBtn" class="btn btn-secondary" type="button">Backup (JSON)</button>
+      <label class="btn btn-secondary filelike" for="restoreInput">Restore</label>
+      <input id="restoreInput" type="file" accept="application/json" />
+    
+      <div class="syncbox">
+        <span id="syncStatus" class="pill">Sync: –</span>
+        <button id="syncNowBtn" class="btn btn-secondary" type="button" title="Synchronisiert die Daten zwischen Geräten (wenn aktiviert).">Sync jetzt</button>
+      </div>
+</div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Eintrag hinzufügen</h2>
+      <form id="entryForm" class="form">
+        <div class="row">
+          <label>
+            Datum & Uhrzeit
+            <input id="dtInput" type="datetime-local" required />
+          </label>
+
+          <label>
+            Substanz
+            <select id="substanceInput" required>
+              <option value="" disabled selected>Bitte auswählen…</option>
+              <option>sativa</option>
+              <option>CBD</option>
+              <option>Keta</option>
+              <option>Xans</option>
+              <option>MDMA</option>
+              <option>2CB</option>
+              <option>Pilze</option>
+            </select>
+          </label>
+
+          <label>
+            Dosierung (mg)
+            <input id="doseInput" type="number" inputmode="decimal" min="0" step="0.1" placeholder="z. B. 120" required />
+          </label>
+        </div>
+
+        <div class="row row-actions">
+          <button id="saveBtn" class="btn btn-primary" type="submit">Speichern</button>
+          <button id="resetBtn" class="btn btn-ghost" type="button">Zurücksetzen</button>
+
+          <div class="spacer"></div>
+
+          <label class="inline">
+            CSV‑Trenner:
+            <select id="delimiterSelect" title="Für deutsches Excel ist ; oft besser.">
+              <option value=";">;</option>
+              <option value=",">,</option>
+            </select>
+          </label>
+        </div>
+
+        <p class="hint">
+          Hinweis: Daten werden lokal gespeichert. Nach Passwort-Freigabe werden sie zusätzlich zwischen Geräten synchronisiert.</p>
+      </form>
+    </section>
+
+    
+    <section class="card tabs">
+      <div class="tabbar" role="tablist" aria-label="Ansichten">
+        <button class="tabbtn active" type="button" data-tab="tab-verlauf" role="tab" aria-selected="true">Verlauf</button>
+        <button class="tabbtn" type="button" data-tab="tab-graph" role="tab" aria-selected="false">Graph</button>
+        <button class="tabbtn" type="button" data-tab="tab-monthly" role="tab" aria-selected="false">Monat</button>
+        <button class="tabbtn" type="button" data-tab="tab-intervals" role="tab" aria-selected="false">Abstände (6M)</button>
+      </div>
+    </section>
+
+    <section id="tab-verlauf" class="tabpanel active" role="tabpanel">
+<section class="card">
+      <div class="table-head">
+        <h2>Verlauf</h2>
+        <div class="filters">
+          <label class="inline">
+            Filter:
+            <select id="filterSubstance">
+              <option value="">Alle</option>
+              <option>sativa</option>
+              <option>CBD</option>
+              <option>Keta</option>
+              <option>Xans</option>
+              <option>MDMA</option>
+              <option>2CB</option>
+              <option>Pilze</option>
+            </select>
+          </label>
+          <label class="inline">
+            Suche:
+            <input id="searchInput" type="search" placeholder="z. B. 2026-02 oder 120" />
+          </label>
+          <button id="clearBtn" class="btn btn-ghost" type="button">Alles löschen</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table" aria-label="Konsum Verlauf">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Substanz</th>
+              <th>Dosierung (mg)</th>
+              <th class="actions-col">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="footer-line">
+        <div id="countInfo" class="muted"></div>
+      </div>
+    </section>
+    </section>
+
+    <section id="tab-graph" class="tabpanel" role="tabpanel">
+      <section class="card">
+        <div class="table-head">
+          <h2>Graph – Konsum pro Monat</h2>
+          <div class="filters">
+            <label class="inline">
+              Zeitraum:
+              <select id="graphRange">
+                <option value="week">Letzte Woche</option>
+                <option value="1m">Letzten Monat</option>
+                <option value="3m">Letzten 3 Monate</option>
+                <option value="6m">Letzten 6 Monate</option>
+                <option value="12m" selected>Letzten 12 Monate</option>
+                <option value="24m">Letzten 24 Monate</option>
+              </select>
+            </label>
+            <label class="inline">
+              Substanz:
+              <select id="graphSubstance">
+                <option value="" selected>Alle</option>
+                <option>sativa</option>
+                <option>CBD</option>
+                <option>Keta</option>
+                <option>Xans</option>
+                <option>MDMA</option>
+                <option>2CB</option>
+                <option>Pilze</option>
+              </select>
+            </label>
+            <label class="inline">
+              Metrik:
+              <select id="graphMetric">
+                <option value="days" selected>Konsumtage</option>
+                <option value="mg">Konsummenge (mg)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="chart-wrap">
+          <canvas id="monthlyChart" width="900" height="360" aria-label="Monatsgraph" role="img"></canvas>
+        </div>
+
+        <div id="chartLegend" class="legend" aria-label="Legende"></div>
+        <div id="graphSummary" class="muted" style="margin-top:10px;"></div>
+      </section>
+    </section>
+
+    
+    <section id="tab-monthly" class="tabpanel" role="tabpanel">
+      <section class="card">
+        <div class="table-head">
+          <h2>Monat</h2>
+          <div class="filters">
+            <label class="inline">
+              Substanz:
+              <select id="monthlyFilterSubstance">
+                <option value="" selected>Alle</option>
+                <option>sativa</option>
+                <option>CBD</option>
+                <option>Keta</option>
+                <option>Xans</option>
+                <option>MDMA</option>
+                <option>2CB</option>
+                <option>Pilze</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="kpi-grid" aria-label="Kennzahlen">
+          <div class="kpi"><div class="kpi-label">Konsumtage gesamt</div><div id="kpiTotalDays" class="kpi-value">–</div></div>
+          <div class="kpi"><div class="kpi-label">Ø mg pro Konsumtag</div><div id="kpiAvgMgPerDay" class="kpi-value">–</div></div>
+          <div class="kpi"><div class="kpi-label">Ø Abstand zwischen Konsumtagen</div><div id="kpiAvgGapDays" class="kpi-value">–</div></div>
+        </div>
+
+        <div class="kpi-grid kpi-grid-2" style="margin-top:10px;">
+          <div class="kpi">
+            <div class="kpi-label">Letzter Konsum (gesamt)</div>
+            <div id="lastOverall" class="kpi-value mono">–</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Letzter Konsum (Substanz)</div>
+            <div class="inline" style="margin-top:6px; gap:10px; flex-wrap: wrap;">
+              <select id="lastSubstanceSelect" style="min-width: 140px;">
+                <option value="sativa">sativa</option>
+                <option value="CBD">CBD</option>
+                <option value="Keta">Keta</option>
+                <option value="Xans">Xans</option>
+                <option value="MDMA">MDMA</option>
+                <option value="2CB">2CB</option>
+                <option value="Pilze">Pilze</option>
+              </select>
+              <span id="lastSubstance" class="mono">–</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="margin-top:12px;">
+          <table class="table" aria-label="Monatsdaten">
+            <thead>
+              <tr>
+                <th>Monat</th>
+                <th>Konsumtage</th>
+                <th>Ø mg/Konsumtag</th>
+                <th>Summe mg</th>
+              </tr>
+            </thead>
+            <tbody id="monthlyTbody"></tbody>
+          </table>
+        </div>
+        <div id="monthlyNote" class="muted" style="margin-top:10px;"></div>
+      </section>
+    </section>
+
+<section id="tab-intervals" class="tabpanel" role="tabpanel">
+      <section class="card">
+        <div class="table-head">
+          <h2>Abstände zwischen Konsum-Events (letzte 6 Monate)</h2>
+          <div class="filters">
+            <button id="intervalsRefreshBtn" class="btn btn-secondary" type="button">Neu berechnen</button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" aria-label="Abstands-Kennzahlen">
+          <div class="kpi"><div class="kpi-label">Events (6M)</div><div id="kpi6mEvents" class="kpi-value">–</div></div>
+          <div class="kpi"><div class="kpi-label">Ø Abstand</div><div id="kpi6mAvg" class="kpi-value">–</div></div>
+          <div class="kpi"><div class="kpi-label">Median</div><div id="kpi6mMedian" class="kpi-value">–</div></div>
+          <div class="kpi"><div class="kpi-label">Min / Max</div><div id="kpi6mMinMax" class="kpi-value">–</div></div>
+        </div>
+
+        <div class="chart-wrap" style="margin-top:12px;">
+          <canvas id="gapHistogram" width="900" height="320" aria-label="Histogramm Abstände" role="img"></canvas>
+        </div>
+
+        <h3 class="subhead">Letzte Abstände</h3>
+        <div class="table-wrap">
+          <table class="table" aria-label="Letzte Abstände">
+            <thead>
+              <tr>
+                <th>Von</th>
+                <th>Zu</th>
+                <th>Abstand</th>
+                <th>Substanz (von → zu)</th>
+              </tr>
+            </thead>
+            <tbody id="gapsTbody"></tbody>
+          </table>
+        </div>
+        <div id="intervalsNote" class="muted" style="margin-top:10px;"></div>
+      </section>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
