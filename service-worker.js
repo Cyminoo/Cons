@@ -1,4 +1,4 @@
-const CACHE_NAME = "konsum-tracker-v5";
+const CACHE_NAME = "konsum-tracker-v6";
 const ASSETS = [
   "./",
   "./index.html",

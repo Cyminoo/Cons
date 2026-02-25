@@ -1011,7 +1011,23 @@
     return `/.netlify/functions/konsum-sync?vault=${vaultId}`;
   }
 
-  function latestUpdatedAt(entries){
+  
+
+  async function syncPushRaw(entries=null, reason="auto"){
+    if(!vaultId){ setSyncStatus("Sync: aus"); return false; }
+    try{
+      const payloadEntries = (entries ?? load().map(normalizeEntry)).map(normalizeEntry);
+      const updatedAt = latestUpdatedAt(payloadEntries);
+      const body = JSON.stringify({ version: 2, updatedAt, entries: payloadEntries, reason });
+      const resp = await fetch(apiUrl(), { method: "PUT", headers: { "Content-Type": "application/json" }, body });
+      if(!resp.ok){ setSyncStatus(`Sync: Fehler (${resp.status})`, "err"); return false; }
+      setSyncStatus("Sync: ok", "ok");
+      saveMeta({ ...(loadMeta()), lastSyncAt: new Date().toISOString(), lastRemoteUpdatedAt: updatedAt });
+      return true;
+    }catch(err){ console.error(err); setSyncStatus("Sync: offline/blocked", "err"); return false; }
+  }
+
+function latestUpdatedAt(entries){
     let best = "";
     for(const e of entries){
       const t = String(e.updated_at || "");
@@ -1051,7 +1067,7 @@
         setSyncStatus("Sync: leer", "ok");
         // push local if we have data
         const local = load().map(normalizeEntry);
-        if(local.length) await syncPush(local, "init");
+        if(local.length) await syncPushRaw(local, "init");
         return;
       }
       if(!resp.ok){
@@ -1069,7 +1085,7 @@
       const localLatest = latestUpdatedAt(merged);
       const remoteLatest = latestUpdatedAt(remoteEntries.map(normalizeEntry));
       if(localLatest > remoteLatest){
-        await syncPush(merged, "merge");
+        await syncPushRaw(merged, "merge");
       }else{
         setSyncStatus("Sync: ok", "ok");
         saveMeta({ ...(loadMeta()), lastRemoteUpdatedAt: remoteLatest, lastSyncAt: new Date().toISOString() });
@@ -1085,35 +1101,12 @@
   }
 
   async function syncPush(entries=null, reason="auto"){
-    if(!vaultId){
-      setSyncStatus("Sync: aus");
-      return;
-    }
+    if(!vaultId){ setSyncStatus("Sync: aus"); return; }
     if(syncing) return;
     syncing = true;
     setSyncStatus("Sync: sende…", "busy");
-
     try{
-      const payloadEntries = (entries ?? load().map(normalizeEntry)).map(normalizeEntry);
-      const updatedAt = latestUpdatedAt(payloadEntries);
-      const body = JSON.stringify({ version: 2, updatedAt, entries: payloadEntries, reason });
-
-      const resp = await fetch(apiUrl(), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body
-      });
-
-      if(!resp.ok){
-        setSyncStatus(`Sync: Fehler (${resp.status})`, "err");
-        return;
-      }
-
-      setSyncStatus("Sync: ok", "ok");
-      saveMeta({ ...(loadMeta()), lastSyncAt: new Date().toISOString(), lastRemoteUpdatedAt: updatedAt });
-    }catch(err){
-      console.error(err);
-      setSyncStatus("Sync: offline/blocked", "err");
+      await syncPushRaw(entries, reason);
     }finally{
       syncing = false;
     }
