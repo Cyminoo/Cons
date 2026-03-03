@@ -26,3 +26,8 @@ Diese Version kann optional über **Netlify Functions + Netlify Blobs** synchron
 - Lokal: Browser-Speicher (LocalStorage)
 - Sync: Netlify Blobs (Store `konsum-tracker`, Key `vault/<hash>.json`)
 - Export: CSV (Excel-kompatibel), Backup/Restore: JSON
+
+
+## Sync-Hinweis
+- Die Netlify Function liegt unter `netlify/functions/konsum-sync.js`.
+- Auf allen Geräten dieselbe Haupt-URL der Netlify-Site nutzen (keine Deploy-Preview-URL).

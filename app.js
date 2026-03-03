@@ -4,6 +4,7 @@
   const STORAGE_KEY = "konsumTracker.v1";              // entries array
   const AUTH_KEY    = "konsumTracker.auth.v1";         // { ok:1, vault:"<hex>" }
   const META_KEY    = "konsumTracker.meta.v1";         // { lastSyncAt, lastRemoteUpdatedAt }
+  const DELETED_KEY = "konsumTracker.deleted.v1";      // { [id]: deleted_at }
 
   const SUBSTANCES = ["sativa","CBD","Keta","Xans","MDMA","2CB","Pilze"];
   const COLORS = {
@@ -192,6 +193,35 @@
     localStorage.setItem(META_KEY, JSON.stringify(meta || {}));
   }
 
+  function loadDeleted(){
+    try{
+      const raw = localStorage.getItem(DELETED_KEY);
+      const obj = raw ? JSON.parse(raw) : {};
+      return (obj && typeof obj === "object" && !Array.isArray(obj)) ? obj : {};
+    }catch{
+      return {};
+    }
+  }
+
+  function saveDeleted(map){
+    localStorage.setItem(DELETED_KEY, JSON.stringify(map || {}));
+  }
+
+  function latestDeletedAt(deletedMap){
+    let best = "";
+    for(const t of Object.values(deletedMap || {})){
+      const s = String(t || "");
+      if(s > best) best = s;
+    }
+    return best || new Date(0).toISOString();
+  }
+
+  function syncRevision(entries, deletedMap){
+    const a = latestUpdatedAt(entries || []);
+    const b = latestDeletedAt(deletedMap || {});
+    return a > b ? a : b;
+  }
+
   function normalizeEntry(e){
     const dt = String(e.dt || "");
     const updated_at = String(e.updated_at || dt || new Date().toISOString());
@@ -369,6 +399,11 @@
     const idx = data.findIndex(x => x.id === entry.id);
     if(idx >= 0) data[idx] = entry; else data.push(entry);
     save(data);
+    const deleted = loadDeleted();
+    if(deleted[entry.id]){
+      delete deleted[entry.id];
+      saveDeleted(deleted);
+    }
   }
 
   function removeEntry(id){
@@ -376,6 +411,9 @@
     if(!ok) return;
     const data = load().map(normalizeEntry).filter(e => e.id !== id);
     save(data);
+    const deleted = loadDeleted();
+    deleted[id] = new Date().toISOString();
+    saveDeleted(deleted);
     if(editId === id){
       editId = null;
       formReset();
@@ -446,9 +484,10 @@
 
   function backupJson(){
     const data = load().map(normalizeEntry);
+    const deleted = loadDeleted();
     const stamp = new Date();
     const fn = `konsum_backup_${stamp.getFullYear()}-${String(stamp.getMonth()+1).padStart(2,"0")}-${String(stamp.getDate()).padStart(2,"0")}.json`;
-    download(fn, JSON.stringify({version:2, exported_at: stamp.toISOString(), entries: data}, null, 2), "application/json");
+    download(fn, JSON.stringify({version:3, exported_at: stamp.toISOString(), entries: data, deleted}, null, 2), "application/json");
     status("Backup heruntergeladen.");
   }
 
@@ -459,9 +498,11 @@
     const entries = Array.isArray(obj) ? obj : (Array.isArray(obj.entries) ? obj.entries : null);
     if(!entries){ alert("Backup hat kein gültiges 'entries'-Feld."); return; }
     const normalized = entries.map(normalizeEntry).filter(e => e.dt && e.substance && Number.isFinite(e.dose_mg));
+    const deleted = (obj && obj.deleted && typeof obj.deleted === "object" && !Array.isArray(obj.deleted)) ? obj.deleted : {};
     const ok = confirm(`Restore überschreibt deinen lokalen Verlauf. Fortfahren? (Einträge: ${normalized.length})`);
     if(!ok) return;
     save(normalized);
+    saveDeleted(deleted);
     formReset();
     rerenderAll();
     queueSync(true);
@@ -471,6 +512,12 @@
   function clearAll(){
     const ok = confirm("Wirklich ALLE Einträge löschen? (Nicht rückgängig)");
     if(!ok) return;
+    const deleted = loadDeleted();
+    const nowIso = new Date().toISOString();
+    for(const e of load().map(normalizeEntry)){
+      deleted[e.id] = nowIso;
+    }
+    saveDeleted(deleted);
     localStorage.removeItem(STORAGE_KEY);
     formReset();
     rerenderAll();
@@ -868,7 +915,7 @@
         const d = parseDt(e.dt);
         return d >= cutoff && d <= now;
       })
-      .sort((a,b)=> (a.dt||"").localeCompare(a.dt||""));
+      .sort((a,b)=> (a.dt||"").localeCompare(b.dt||""));
 
     const gaps = [];
     for(let i=1;i<data.length;i++){
@@ -1011,23 +1058,7 @@
     return `/.netlify/functions/konsum-sync?vault=${vaultId}`;
   }
 
-  
-
-  async function syncPushRaw(entries=null, reason="auto"){
-    if(!vaultId){ setSyncStatus("Sync: aus"); return false; }
-    try{
-      const payloadEntries = (entries ?? load().map(normalizeEntry)).map(normalizeEntry);
-      const updatedAt = latestUpdatedAt(payloadEntries);
-      const body = JSON.stringify({ version: 2, updatedAt, entries: payloadEntries, reason });
-      const resp = await fetch(apiUrl(), { method: "PUT", headers: { "Content-Type": "application/json" }, body });
-      if(!resp.ok){ setSyncStatus(`Sync: Fehler (${resp.status})`, "err"); return false; }
-      setSyncStatus("Sync: ok", "ok");
-      saveMeta({ ...(loadMeta()), lastSyncAt: new Date().toISOString(), lastRemoteUpdatedAt: updatedAt });
-      return true;
-    }catch(err){ console.error(err); setSyncStatus("Sync: offline/blocked", "err"); return false; }
-  }
-
-function latestUpdatedAt(entries){
+  function latestUpdatedAt(entries){
     let best = "";
     for(const e of entries){
       const t = String(e.updated_at || "");
@@ -1036,10 +1067,18 @@ function latestUpdatedAt(entries){
     return best || new Date(0).toISOString();
   }
 
-  function mergeEntries(localEntries, remoteEntries){
+  function mergeDeleted(localDeleted, remoteDeleted){
+    const out = { ...(localDeleted || {}) };
+    for(const [id, t] of Object.entries(remoteDeleted || {})){
+      if(!out[id] || String(t) > String(out[id])) out[id] = String(t);
+    }
+    return out;
+  }
+
+  function mergeEntries(localEntries, remoteEntries, deletedMap={}){
     const map = new Map();
-    for(const e of localEntries.map(normalizeEntry)) map.set(e.id, e);
-    for(const e of remoteEntries.map(normalizeEntry)){
+    for(const e of (localEntries || []).map(normalizeEntry)) map.set(e.id, e);
+    for(const e of (remoteEntries || []).map(normalizeEntry)){
       const cur = map.get(e.id);
       if(!cur) map.set(e.id, e);
       else{
@@ -1048,7 +1087,52 @@ function latestUpdatedAt(entries){
         map.set(e.id, (b > a) ? e : cur);
       }
     }
-    return [...map.values()].filter(e => e.dt && e.substance && Number.isFinite(e.dose_mg));
+    return [...map.values()].filter(e => {
+      if(!(e.dt && e.substance && Number.isFinite(e.dose_mg))) return false;
+      const tomb = deletedMap[e.id];
+      if(!tomb) return true;
+      return String(e.updated_at || "") > String(tomb || "");
+    });
+  }
+
+  async function syncPushRaw(entries=null, reason="auto"){
+    if(!vaultId){
+      setSyncStatus("Sync: aus");
+      return false;
+    }
+    try{
+      const payloadEntries = (entries ?? load().map(normalizeEntry)).map(normalizeEntry);
+      const deleted = loadDeleted();
+      const updatedAt = syncRevision(payloadEntries, deleted);
+      const body = JSON.stringify({ version: 3, updatedAt, entries: payloadEntries, deleted, reason });
+
+      const resp = await fetch(apiUrl(), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body
+      });
+
+      if(!resp.ok){
+        setSyncStatus(`Sync: Fehler (${resp.status})`, "err");
+        return false;
+      }
+
+      const serverState = await resp.json().catch(() => null);
+      if(serverState && Array.isArray(serverState.entries)){
+        save(serverState.entries.map(normalizeEntry));
+        saveDeleted(mergeDeleted(loadDeleted(), serverState.deleted || {}));
+        rerenderAll();
+      }
+
+      setSyncStatus("Sync: ok", "ok");
+      saveMeta({ ...(loadMeta()), lastSyncAt: new Date().toISOString(), lastRemoteUpdatedAt: updatedAt });
+      return true;
+    }catch(err){
+      console.error(err);
+      setSyncStatus("Sync: offline/blocked", "err");
+      return false;
+    }
   }
 
   async function syncPull(firstRun=false){
@@ -1063,11 +1147,13 @@ function latestUpdatedAt(entries){
     try{
       const resp = await fetch(apiUrl(), { method: "GET", cache: "no-store" });
       if(resp.status === 404){
-        // nothing remote yet
         setSyncStatus("Sync: leer", "ok");
-        // push local if we have data
         const local = load().map(normalizeEntry);
-        if(local.length) await syncPushRaw(local, "init");
+        const deleted = loadDeleted();
+        if(local.length || Object.keys(deleted).length){
+          await syncPushRaw(local, "init");
+        }
+        if(firstRun) rerenderAll();
         return;
       }
       if(!resp.ok){
@@ -1076,19 +1162,25 @@ function latestUpdatedAt(entries){
       }
       const remote = await resp.json();
       const remoteEntries = Array.isArray(remote.entries) ? remote.entries : [];
+      const remoteDeleted = (remote && remote.deleted && typeof remote.deleted === "object" && !Array.isArray(remote.deleted)) ? remote.deleted : {};
       const localEntries = load().map(normalizeEntry);
+      const localDeleted = loadDeleted();
 
-      const merged = mergeEntries(localEntries, remoteEntries);
-      save(merged);
+      const mergedDeleted = mergeDeleted(localDeleted, remoteDeleted);
+      const mergedEntries = mergeEntries(localEntries, remoteEntries, mergedDeleted);
 
-      // if our merged is "newer", push back
-      const localLatest = latestUpdatedAt(merged);
-      const remoteLatest = latestUpdatedAt(remoteEntries.map(normalizeEntry));
-      if(localLatest > remoteLatest){
-        await syncPushRaw(merged, "merge");
+      save(mergedEntries);
+      saveDeleted(mergedDeleted);
+
+      const localRev = syncRevision(localEntries, localDeleted);
+      const remoteRev = syncRevision(remoteEntries.map(normalizeEntry), remoteDeleted);
+      const mergedRev = syncRevision(mergedEntries, mergedDeleted);
+
+      if(localRev > remoteRev){
+        await syncPushRaw(mergedEntries, "merge");
       }else{
         setSyncStatus("Sync: ok", "ok");
-        saveMeta({ ...(loadMeta()), lastRemoteUpdatedAt: remoteLatest, lastSyncAt: new Date().toISOString() });
+        saveMeta({ ...(loadMeta()), lastRemoteUpdatedAt: mergedRev, lastSyncAt: new Date().toISOString() });
       }
 
       if(firstRun) rerenderAll();
@@ -1101,7 +1193,10 @@ function latestUpdatedAt(entries){
   }
 
   async function syncPush(entries=null, reason="auto"){
-    if(!vaultId){ setSyncStatus("Sync: aus"); return; }
+    if(!vaultId){
+      setSyncStatus("Sync: aus");
+      return;
+    }
     if(syncing) return;
     syncing = true;
     setSyncStatus("Sync: sende…", "busy");
@@ -1184,12 +1279,21 @@ function latestUpdatedAt(entries){
     // migrate/normalize without deleting
     const normalized = load().map(normalizeEntry);
     save(normalized);
+    saveDeleted(loadDeleted());
 
     formReset();
     renderTable();
     renderLast();
     setActiveTab("tab-verlauf");
     setSyncStatus(vaultId ? "Sync: initialisiere…" : "Sync: aus", vaultId ? "busy" : "neutral");
+
+    document.addEventListener("visibilitychange", () => {
+      if(document.visibilityState === "visible" && vaultId) syncPull();
+    });
+    window.addEventListener("online", () => { if(vaultId) syncPull(); });
+    window.setInterval(() => {
+      if(vaultId && document.visibilityState === "visible") syncPull();
+    }, 15000);
 
     // Service Worker (needs HTTPS)
     if ("serviceWorker" in navigator) {
