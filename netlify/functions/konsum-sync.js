@@ -1,6 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { getStore } from "@netlify/blobs";
 
 function json(data, init = {}) {
   const headers = new Headers(init.headers || {});
@@ -13,156 +11,68 @@ function bad(message, status = 400) {
   return json({ error: message }, { status });
 }
 
-function normalizeEntry(e) {
-  const dt = String(e?.dt || "");
-  const updated_at = String(e?.updated_at || dt || new Date(0).toISOString());
-  return {
-    id: String(e?.id || ""),
-    dt,
-    substance: String(e?.substance || ""),
-    dose_mg: Number(e?.dose_mg),
-    updated_at,
-  };
+function safeStr(x) { return String(x ?? ""); }
+
+function sanitizeState(body) {
+  const version = Number(body?.version) || 1;
+  const updatedAt = safeStr(body?.updatedAt || new Date(0).toISOString());
+
+  const entriesIn = Array.isArray(body?.entries) ? body.entries : [];
+  const entries = entriesIn.map((e) => ({
+    id: safeStr(e?.id),
+    dt: safeStr(e?.dt),
+    substance: safeStr(e?.substance),
+    dose_mg: (e?.substance === "Alkohol") ? undefined : Number(e?.dose_mg),
+    medical: Boolean(e?.medical),
+    alcohol_drinks: Array.isArray(e?.alcohol_drinks) ? e.alcohol_drinks : (Array.isArray(e?.drinks) ? e.drinks : []),
+    alcohol_total_ml: Number(e?.alcohol_total_ml),
+    alcohol_pure_ml: Number(e?.alcohol_pure_ml),
+    updated_at: safeStr(e?.updated_at || e?.dt || new Date(0).toISOString()),
+  })).filter(e => e.id && e.dt && e.substance);
+
+  // Normalize deleted map
+  const deletedIn = (body?.deleted && typeof body.deleted === "object" && !Array.isArray(body.deleted)) ? body.deleted : {};
+  const deleted = {};
+  for (const [k, v] of Object.entries(deletedIn)) deleted[safeStr(k)] = safeStr(v);
+
+  return { version, updatedAt, entries, deleted };
 }
 
-function normalizeDeletedMap(obj) {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return {};
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) out[String(k)] = String(v || "");
-  return out;
-}
+export default async (request) => {
+  const url = new URL(request.url);
+  const vault = url.searchParams.get("vault");
+  if (!vault || vault.length < 20) return bad("missing vault", 400);
 
-function latestUpdatedAt(entries) {
-  let best = "";
-  for (const e of entries || []) {
-    const t = String(e?.updated_at || "");
-    if (t > best) best = t;
-  }
-  return best || new Date(0).toISOString();
-}
+  const store = getStore("konsum-tracker");
+  const key = `vault:${vault}`;
 
-function latestDeletedAt(deletedMap) {
-  let best = "";
-  for (const t of Object.values(deletedMap || {})) {
-    const s = String(t || "");
-    if (s > best) best = s;
-  }
-  return best || new Date(0).toISOString();
-}
-
-function syncRevision(entries, deletedMap) {
-  const a = latestUpdatedAt(entries);
-  const b = latestDeletedAt(deletedMap);
-  return a > b ? a : b;
-}
-
-function mergeDeleted(a, b) {
-  const out = { ...(a || {}) };
-  for (const [id, t] of Object.entries(b || {})) {
-    if (!out[id] || String(t) > String(out[id])) out[id] = String(t);
-  }
-  return out;
-}
-
-function mergeEntries(localEntries, remoteEntries, deletedMap = {}) {
-  const map = new Map();
-  for (const e of (localEntries || []).map(normalizeEntry)) {
-    if (e.id) map.set(e.id, e);
-  }
-  for (const e of (remoteEntries || []).map(normalizeEntry)) {
-    if (!e.id) continue;
-    const cur = map.get(e.id);
-    if (!cur) map.set(e.id, e);
-    else {
-      const a = String(cur.updated_at || "");
-      const b = String(e.updated_at || "");
-      map.set(e.id, b > a ? e : cur);
-    }
-  }
-  return [...map.values()].filter((e) => {
-    if (!(e.id && e.dt && e.substance && Number.isFinite(e.dose_mg))) return false;
-    const tomb = deletedMap[e.id];
-    if (!tomb) return true;
-    return String(e.updated_at || "") > String(tomb || "");
-  });
-}
-
-async function getStoreAdapter() {
-  try {
-    const mod = await import("@netlify/blobs");
-    const store = mod.getStore({ name: "konsum-sync", consistency: "strong" });
-    return {
-      async getJSON(key) {
-        const raw = await store.get(key, { consistency: "strong" });
-        return raw ? JSON.parse(raw) : null;
-      },
-      async setJSON(key, value) {
-        await store.setJSON(key, value);
-      },
-    };
-  } catch {
-    const dir = join(tmpdir(), "konsum-tracker-sync-store");
-    await mkdir(dir, { recursive: true });
-    const filePath = (key) => join(dir, key.replace(/[^\w.-]+/g, "_") + ".json");
-    return {
-      async getJSON(key) {
-        try {
-          const raw = await readFile(filePath(key), "utf8");
-          return JSON.parse(raw);
-        } catch {
-          return null;
-        }
-      },
-      async setJSON(key, value) {
-        await writeFile(filePath(key), JSON.stringify(value, null, 2), "utf8");
-      },
-    };
-  }
-}
-
-export default async (req, context) => {
-  const url = new URL(req.url);
-  const vault = url.searchParams.get("vault") || "";
-  if (!/^[a-f0-9]{64}$/i.test(vault)) return bad("Missing or invalid vault", 400);
-
-  const store = await getStoreAdapter();
-  const key = `vault-${vault}`;
-
-  if (req.method === "GET") {
-    const existing = await store.getJSON(key);
-    if (!existing) return bad("Not found", 404);
-    return json(existing, { status: 200 });
+  if (request.method === "GET") {
+    const state = await store.get(key, { type: "json" });
+    if (!state) return bad("not found", 404);
+    return json(state, { status: 200 });
   }
 
-  if (req.method === "PUT") {
+  if (request.method === "PUT") {
     let body;
-    try {
-      body = await req.json();
-    } catch {
-      return bad("Invalid JSON", 400);
+    try { body = await request.json(); }
+    catch { return bad("invalid json", 400); }
+
+    const incoming = sanitizeState(body);
+    const current = await store.get(key, { type: "json" });
+
+    // Prevent stale overwrite
+    if (current && safeStr(current.updatedAt) > safeStr(incoming.updatedAt)) {
+      return json({ ...current, note: "server_newer" }, { status: 200 });
     }
 
-    const incomingEntries = Array.isArray(body?.entries)
-      ? body.entries.map(normalizeEntry).filter((e) => e.id && e.dt && e.substance && Number.isFinite(e.dose_mg))
-      : [];
-    const incomingDeleted = normalizeDeletedMap(body?.deleted);
-    const existing = (await store.getJSON(key)) || { version: 3, updatedAt: new Date(0).toISOString(), entries: [], deleted: {} };
-
-    const mergedDeleted = mergeDeleted(normalizeDeletedMap(existing.deleted), incomingDeleted);
-    const mergedEntries = mergeEntries(existing.entries || [], incomingEntries, mergedDeleted);
-    const updatedAt = syncRevision(mergedEntries, mergedDeleted);
-
-    const payload = {
-      version: 3,
-      updatedAt,
-      savedAt: new Date().toISOString(),
-      entries: mergedEntries,
-      deleted: mergedDeleted,
-    };
-
-    await store.setJSON(key, payload);
-    return json(payload, { status: 200 });
+    await store.set(key, incoming);
+    return json(incoming, { status: 200 });
   }
 
-  return bad("Method not allowed", 405);
+  if (request.method === "DELETE") {
+    await store.delete(key);
+    return json({ ok: 1 }, { status: 200 });
+  }
+
+  return bad("method not allowed", 405);
 };

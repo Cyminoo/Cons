@@ -73,6 +73,7 @@
               <option>MDMA</option>
               <option>2CB</option>
               <option>Pilze</option>
+              <option>Alkohol</option>
             </select>
           </label>
 
@@ -96,6 +97,24 @@
             </select>
           </label>
         </div>
+        <div id="xansMedicalWrap" class="row" style="margin-top:10px; display:none;">
+          <div class="inline" style="gap:10px; flex-wrap:wrap;">
+            <button id="medicalToggle" class="btn btn-secondary" type="button" aria-pressed="false">medizinisch</button>
+            <span class="muted">Nur bei Xans. Medizinisch wird in Abständen/Stats nicht mitgezählt.</span>
+          </div>
+        </div>
+
+        <div id="alcoholWrap" class="alcohol-wrap" style="display:none; margin-top:12px;">
+          <h3 class="subhead" style="margin-top:0;">Alkohol – Drinks</h3>
+          <div id="drinkList" class="drink-list"></div>
+          <div class="row row-actions" style="grid-template-columns:auto 1fr;">
+            <button id="addDrinkBtn" class="btn btn-secondary" type="button">Drink hinzufügen</button>
+            <div id="alcoholSummary" class="muted"></div>
+          </div>
+          <p class="hint">Bei Alkohol werden % und ml pro Drink gespeichert. Anzeige im Verlauf + Details.</p>
+        </div>
+
+
 
         <p class="hint">
           Hinweis: Daten werden lokal gespeichert. Nach Passwort-Freigabe werden sie zusätzlich zwischen Geräten synchronisiert.</p>
@@ -128,6 +147,7 @@
               <option>MDMA</option>
               <option>2CB</option>
               <option>Pilze</option>
+                <option>Alkohol</option>
             </select>
           </label>
           <label class="inline">
@@ -143,8 +163,7 @@
           <thead>
             <tr>
               <th>Datum</th>
-              <th>Substanz</th>
-              <th>Dosierung (mg)</th>
+              <th>Konsum</th>
               <th class="actions-col">Aktionen</th>
             </tr>
           </thead>
@@ -185,6 +204,7 @@
                 <option>MDMA</option>
                 <option>2CB</option>
                 <option>Pilze</option>
+                <option>Alkohol</option>
               </select>
             </label>
             <label class="inline">
@@ -223,6 +243,7 @@
                 <option>MDMA</option>
                 <option>2CB</option>
                 <option>Pilze</option>
+                <option>Alkohol</option>
               </select>
             </label>
           </div>
@@ -262,8 +283,8 @@
               <tr>
                 <th>Monat</th>
                 <th>Konsumtage</th>
-                <th>Ø mg/Konsumtag</th>
-                <th>Summe mg</th>
+                <th>Ø Menge/Konsumtag</th>
+                <th>Summe Menge</th>
               </tr>
             </thead>
             <tbody id="monthlyTbody"></tbody>

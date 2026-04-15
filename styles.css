@@ -375,3 +375,79 @@ canvas{ display:block; width:100%; height:auto; }
   gap: 8px;
   align-items: center;
 }
+
+
+/* Alcohol editor */
+.drink-list{ display:grid; gap:10px; }
+.drink-row{
+  display:grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+.drink-row .btn{ padding: 10px 12px; }
+@media (max-width: 760px){
+  .drink-row{ grid-template-columns: 1fr 1fr; }
+  .drink-row .remove-col{ grid-column: 1 / -1; }
+}
+
+.pill{
+  display:inline-flex;
+  align-items:center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: var(--muted);
+  font-size: 12px;
+  gap: 6px;
+}
+.pill.ok{ border-color: rgba(107,255,149,.28); }
+.pill.err{ border-color: rgba(255,107,107,.28); }
+.pill.busy{ border-color: rgba(93,214,255,.28); }
+
+/* Modal */
+.modal{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding: 18px;
+  z-index: 40;
+}
+.modal.show{ display:flex; }
+.modal-card{
+  width: min(920px, 100%);
+  max-height: 85vh;
+  overflow:auto;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.04));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+.modal-head{
+  display:flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.badges{ display:flex; gap: 8px; flex-wrap: wrap; }
+.entry-list{ margin-top: 10px; display:grid; gap: 10px; }
+.entry-item{
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(0,0,0,.12);
+}
+.entry-item-head{
+  display:flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.entry-actions{ display:flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.small-muted{ color: var(--muted); font-size: 12px; }
