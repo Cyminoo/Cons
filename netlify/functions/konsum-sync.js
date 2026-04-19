@@ -76,8 +76,18 @@ export default async (request) => {
 
   if (request.method === "PUT") {
     let body;
-    try { body = await request.json(); }
-    catch { return bad("invalid json", 400); }
+    let raw = "";
+    try {
+      raw = await request.text();
+      body = JSON.parse(raw);
+    } catch (err) {
+      return json({
+        error: "invalid_json",
+        message: "Request body must be valid JSON (Content-Type: application/json).",
+        hint: "If you see '[object Object]' here, the client is sending a JS object instead of JSON.stringify(payload). Clear the site cache / service worker and redeploy the latest frontend.",
+        received: raw.slice(0, 200)
+      }, { status: 400 });
+    }
 
     const incoming = sanitizeState(body);
     const current = await store.get(key, { type: "json" });
