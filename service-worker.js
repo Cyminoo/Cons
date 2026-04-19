@@ -1,4 +1,4 @@
-const CACHE_NAME = "konsum-tracker-v10";
+const CACHE_NAME = "konsum-tracker-v11";
 const ASSETS = [
   "./",
   "./index.html",
@@ -27,9 +27,34 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+  const url = new URL(req.url);
+
+  // Never cache non-GET
+  if (req.method !== "GET") {
+    return; // default network
+  }
+
+  // Never cache Netlify Functions / API calls
+  if (url.pathname.startsWith("/.netlify/functions/")) {
+    event.respondWith(fetch(req, { cache: "no-store" }));
+    return;
+  }
+
+  // Cache-first for static assets, network fallback
   event.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
-      const copy = res.clone();
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+      return fetch(req).then((res) => {
+        // only cache successful basic responses
+        if (res && res.ok && (res.type === "basic" || res.type === "cors")) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => {});
+        }
+        return res;
+      });
+    })
+  );
+});
       caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
       return res;
     }).catch(() => cached))

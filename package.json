@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@netlify/blobs": "^10.7.4"
+    "@netlify/blobs": "^8.0.0"
   },
   "scripts": {
-    "build": "echo \"no build\""
+    "build": "echo \"ok\""
   }
 }
