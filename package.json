@@ -6,6 +6,6 @@
     "@netlify/blobs": "^8.0.0"
   },
   "scripts": {
-    "build": "echo \"ok\""
+    "build": "echo \"no build\""
   }
 }

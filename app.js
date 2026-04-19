@@ -717,7 +717,7 @@
     const meta = loadMeta();
     const stamp = new Date();
     const fn = `konsum_backup_${stamp.getFullYear()}-${pad(stamp.getMonth()+1)}-${pad(stamp.getDate())}.json`;
-    download(fn, JSON.stringify({version: 8, exported_at: stamp.toISOString(), entries, deleted, meta}, null, 2), "application/json");
+    download(fn, JSON.stringify({version: 14, exported_at: stamp.toISOString(), entries, deleted, meta}, null, 2), "application/json");
     status("Backup heruntergeladen.");
   }
 
@@ -1297,7 +1297,7 @@
   tabButtons.forEach(btn => btn.addEventListener("click", () => setActiveTab(btn.dataset.tab)));
 
   // ---- Sync primitives
-  function apiUrl(){ return `/.netlify/functions/konsum-sync?vault=${vaultId}`; }
+  function apiUrl(){ return `/.netlify/functions/konsum-sync-v14?vault=${vaultId}`; }
 
   function latestUpdatedAt(entries){
     let best = "";
@@ -1352,7 +1352,7 @@
     const payloadEntries = (entries ?? visibleEntries()).map(normalizeEntry);
     const payloadDeleted = deleted ?? loadDeleted();
     const updatedAt = syncRevision(payloadEntries, payloadDeleted);
-    const body = JSON.stringify({ version: 8, updatedAt, entries: payloadEntries, deleted: payloadDeleted, reason });
+    const body = JSON.stringify({ version: 14, updatedAt, entries: payloadEntries, deleted: payloadDeleted, reason });
 
     const resp = await fetch(apiUrl(), {
       method: "PUT",
