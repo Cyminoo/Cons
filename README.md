@@ -1,33 +1,23 @@
 # Konsum Tracker (PWA)
 
-## Wichtig
-- Offline-Cache / „App“-Nutzung auf iOS funktioniert zuverlässig nur über **HTTPS**.
-- **Lokale Daten gehen nicht verloren**: v5 migriert bestehende Einträge (LocalStorage) ohne sie zu löschen.
+## Wichtig: Sync (mehrere Geräte)
+Der Sync nutzt **Netlify Functions + Netlify Blobs**. Dafür muss `@netlify/blobs` als Dependency installiert werden und die Function muss als „modern function“ (Request/Response, ESM) laufen.
 
-## Netlify Sync (mehrere Geräte)
-Diese Version kann optional über **Netlify Functions + Netlify Blobs** synchronisieren.
+**Wenn du per „Deploy manually“ (Drag & Drop) deployt hast**, werden npm-Dependencies oft **nicht installiert** → die Function kann `@netlify/blobs` nicht importieren und liefert 500/502. In dem Fall:
+- nutze **Git-based Deploy** (Repository verbinden) oder
+- deploye mit **Netlify CLI** (damit Dependencies gebundled werden).
 
-### Voraussetzungen
-- Deployment über **Git (Continuous Deployment)** oder **Netlify CLI** (damit Functions + npm Dependencies gebaut werden).
-- In Netlify: **Base directory** = `konsum-tracker-pwa`  
-  (damit `netlify.toml` im Base-Dir greift)
+Netlify Docs:
+- Blobs: installiere `@netlify/blobs` und nutze es in Functions.  
+- Dependencies werden im Build installiert.
 
-### Netlify Einstellungen (empfohlen)
-- Site settings → Build & deploy:
-  - Base directory: `konsum-tracker-pwa`
-  - Publish directory: `.` (kommt aus netlify.toml)
-  - Functions directory: `netlify/functions` (kommt aus netlify.toml)
+## Deploy (Git, empfohlen)
+1) Dateien aus `konsum-tracker-pwa/` ins Repo-Root kopieren (index.html, app.js, netlify/, netlify.toml, package.json …)
+2) Netlify Site mit Git verbinden
+3) Deploy
 
-### Auth-Gate
-- Beim ersten Öffnen auf einem neuen Gerät fragt die App nach dem Passwort (standard: `PeachR`).
-- Danach wird das Gerät per LocalStorage „gemerkt“ und fragt nicht erneut.
-
-## Daten
-- Lokal: Browser-Speicher (LocalStorage)
-- Sync: Netlify Blobs (Store `konsum-tracker`, Key `vault/<hash>.json`)
-- Export: CSV (Excel-kompatibel), Backup/Restore: JSON
-
-
-## Sync-Hinweis
-- Die Netlify Function liegt unter `netlify/functions/konsum-sync.js`.
-- Auf allen Geräten dieselbe Haupt-URL der Netlify-Site nutzen (keine Deploy-Preview-URL).
+Danach test:
+`/.netlify/functions/konsum-sync?vault=...`
+- 404 = noch kein Sync-State
+- 200 = State vorhanden
+- 500 missing_dependency = Deploy ohne Dependency-Install

@@ -1,5 +1,3 @@
-import { getStore } from "@netlify/blobs";
-
 function json(data, init = {}) {
   const headers = new Headers(init.headers || {});
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json; charset=utf-8");
@@ -43,7 +41,31 @@ export default async (request) => {
   const vault = url.searchParams.get("vault");
   if (!vault || vault.length < 20) return bad("missing vault", 400);
 
-  const store = getStore("konsum-tracker");
+
+  // Load Netlify Blobs lazily so missing deps shows a readable error (instead of 502)
+  let getStore;
+  try {
+    ({ getStore } = await import("@netlify/blobs"));
+  } catch (err) {
+    return json({
+      error: "missing_dependency",
+      message: "Cannot import @netlify/blobs. This usually means dependencies were not installed during deploy (e.g., manual drag-and-drop deploy). Use Git-based deploy or Netlify CLI so npm deps are installed.",
+      details: String(err)
+    }, { status: 500 });
+  }
+
+  let store;
+  try {
+    // strong consistency makes cross-device sync update immediately
+    store = getStore({ name: "konsum-tracker", consistency: "strong" });
+  } catch (err) {
+    return json({
+      error: "blobs_unavailable",
+      message: "Netlify Blobs store could not be initialized in this environment.",
+      details: String(err)
+    }, { status: 500 });
+  }
+
   const key = `vault:${vault}`;
 
   if (request.method === "GET") {
